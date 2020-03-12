@@ -22,12 +22,12 @@ def print_argument_info(args):
 
 def parse_arguments():
     # Command line test cases:
-    # 1.) python train.py flower
-    # 2.) python train.py flower --save_dir checkpoints
-    # 3.) python train.py flower --arch "vgg16"
-    # 4.) python train.py flower --learning_rate 0.01 --hidden_units 512 --epochs 20
-    # 5.) python train.py flower --gpu
-    parser = argparse.ArgumentParser(description="Prints out training loss, validation loss, and validation accuracy as the network trains")
+    # 1.) python train.py flowers
+    # 2.) python train.py flowers --save_dir checkpoints
+    # 3.) python train.py flowers --arch "vgg16"
+    # 4.) python train.py flowers --learning_rate 0.01 --hidden_units 512 --epochs 20
+    # 5.) python train.py flowers --gpu
+    parser = argparse.ArgumentParser(description="Prints out training loss, validation loss, and validation accuracy as the network trains.")
     parser.add_argument("data_dir")
     parser.add_argument("--save_dir", default="./", help="The directory where the model checkpoint should be saved.")
     parser.add_argument("--arch", default="vgg16", choices=["vgg16","densenet121"], help="Specify the architecure, or pretrain model, to use.")
