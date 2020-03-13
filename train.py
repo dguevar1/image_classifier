@@ -1,9 +1,113 @@
+
+# Import packages
+from collections import OrderedDict
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+import time
+import torch
+from torch import nn
+from torch import optim
+from torchvision import datasets, transforms, models
+
 import argparse
+
+def get_classifier(model_parameters):
+    classifier = nn.Sequential(OrderedDict([
+        ('dropout', nn.Dropout(model_parameters['dropout'])),
+        ('fc1', nn.Linear(model_parameters['input_size'], model_parameters['hidden_layer1'])),
+        ('relu', nn.ReLU()),
+        ('fc2', nn.Linear(model_parameters['hidden_layer1'], model_parameters['output_size'])),
+        ('output', nn.LogSoftmax(dim=1))
+        ]))
+
+    return classifier
+
+def get_model(pretrain_model):
+    model_parameters = {"pretrain_model": pretrain_model,
+                        "dropout": -1,
+                        "input_size": -1,
+                        "hidden_layer1": -1,
+                        "output_size": -1
+                        }
+
+    if pretrain_model == 'densenet121':
+        model_parameters["dropout"] = 0.2
+        model_parameters["input_size"] = 1024
+        model_parameters["hidden_layer1"] = 256
+        model_parameters["output_size"] = 102
+        model = models.densenet121(pretrained=True)
+    elif pretrain_model == 'vgg16':
+        model_parameters["dropout"] = 0.5
+        model_parameters["input_size"] = 25088
+        model_parameters["hidden_layer1"] = 512
+        model_parameters["output_size"] = 102
+        model = models.vgg16(pretrained=True)
+
+    return model_parameters, model
+
+def load_data(data_dir):
+    my_data_dir = {"train" : None,
+                   "valid" : None,
+                   "test" : None
+                   }
+
+    my_data_dir["train"] = data_dir + '/train'
+    my_data_dir["valid"] = data_dir + '/valid'
+    my_data_dir["test"] = data_dir + '/test'
+
+    my_transforms = {"train" : None,
+                     "valid" : None,
+                     "test" : None
+                     }
+
+    # TODO: Define your transforms for the training, validation, and testing sets
+    my_transforms["train"] = transforms.Compose([transforms.RandomRotation(30),
+                                                 transforms.RandomResizedCrop(224),
+                                                 transforms.RandomHorizontalFlip(),
+                                                 transforms.ToTensor(),
+                                                 transforms.Normalize([0.485, 0.456, 0.406],
+                                                                      [0.229, 0.224, 0.225])])
+
+    my_transforms["valid"] = transforms.Compose([transforms.Resize(255),
+                                                 transforms.CenterCrop(224),
+                                                 transforms.ToTensor(),
+                                                 transforms.Normalize([0.485, 0.456, 0.406],
+                                                                      [0.229, 0.224, 0.225])])
+
+    my_transforms["test"] = transforms.Compose([transforms.Resize(255),
+                                                transforms.CenterCrop(224),
+                                                transforms.ToTensor(),
+                                                transforms.Normalize([0.485, 0.456, 0.406],
+                                                                     [0.229, 0.224, 0.225])])
+
+    # TODO: Load the datasets with ImageFolder
+    my_datasets = {"train" : None,
+                   "valid" : None,
+                   "test" : None
+                   }
+
+    my_datasets["train"] = datasets.ImageFolder(my_data_dir["train"], transform=my_transforms["train"])
+    my_datasets["valid"] = datasets.ImageFolder(my_data_dir["valid"], transform=my_transforms["valid"])
+    my_datasets["test"]= datasets.ImageFolder(my_data_dir["test"], transform=my_transforms["test"])
+
+    # TODO: Using the image datasets and the trainforms, define the dataloaders
+    my_dataloader = {"train" : None,
+                     "valid" : None,
+                     "test" : None
+                     }
+
+    my_dataloader["train"] = torch.utils.data.DataLoader(my_datasets["train"], batch_size=64, shuffle=True)
+    my_dataloader["valid"] = torch.utils.data.DataLoader(my_datasets["valid"], batch_size=64)
+    my_dataloader["test"] = torch.utils.data.DataLoader(my_datasets["test"], batch_size=64)
+
+    return my_dataloader
 
 def parse_arguments():
     # Command line test cases:
     # 1.) python train.py flowers
-    # 2.) python train.py flowers --save_dir checkpoints
+    # 2.) python train.py flowers --save_dir checkpoints --gpu
     # 3.) python train.py flowers --arch "vgg16"
     # 4.) python train.py flowers --learning_rate 0.01 --hidden_units 512 --epochs 20
     # 5.) python train.py flowers --gpu
@@ -38,9 +142,135 @@ def print_argument_info(args):
     else:
         print("CPU will be used to train.")
 
+def print_model_parameters(model_parameters):
+    print("model_parameters['pretrain_model']: {}".format(model_parameters['pretrain_model']))
+    print("model_parameters['dropout']: {}".format(model_parameters['dropout']))
+    print("model_parameters['input_size']: {}".format(model_parameters['input_size']))
+    print("model_parameters['hidden_layer1']: {}".format(model_parameters['hidden_layer1']))
+    print("model_parameters['output_size']: {}".format(model_parameters['output_size']))
+
+def train(model, model_parameters, my_dataloader):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training with device: {device}")
+
+    print_model_parameters(model_parameters)
+
+    # Freeze parameters so we don't backprop through them
+    for param in model.parameters():
+        param.requires_grad = False
+
+    model.classifier = get_classifier(model_parameters)
+
+    criterion = nn.NLLLoss()
+
+    # Only train the classifier parameters, feature parameters are frozen
+    optimizer = optim.Adam(model.classifier.parameters(), lr=0.001)
+
+    # Moving model to device for training.
+    model.to(device);
+
+    # Set the model mode to training.
+    model.train()
+
+    epochs = 10
+    steps = 0
+    running_loss = 0
+    print_every = 10
+
+    for epoch in range(epochs):
+        for inputs, labels in my_dataloader["train"]:
+            steps += 1
+
+            # Move input and label tensors to the default device
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+
+            logps = model.forward(inputs)
+            loss = criterion(logps, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+            if steps % print_every == 0:
+                test_loss = 0
+                accuracy = 0
+                model.eval()
+                with torch.no_grad():
+                    for inputs, labels in my_dataloader["valid"]:
+                        inputs, labels = inputs.to(device), labels.to(device)
+                        logps = model.forward(inputs)
+                        batch_loss = criterion(logps, labels)
+
+                        test_loss += batch_loss.item()
+
+                        # Calculate accuracy
+                        ps = torch.exp(logps)
+                        top_p, top_class = ps.topk(1, dim=1)
+                        equals = top_class == labels.view(*top_class.shape)
+                        accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+
+                print(f"Epoch {epoch+1}/{epochs}.. "
+                      f"Train loss: {running_loss/print_every:.3f}.. "
+                      f"Test loss: {test_loss/len(my_dataloader['valid']):.3f}.. "
+                      f"Test accuracy: {accuracy/len(my_dataloader['valid']):.3f}")
+                running_loss = 0
+                model.train()
+
+def validation(model, dataloader, criterion):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    test_loss = 0
+    accuracy = 0
+    model.eval()
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            logps = model.forward(inputs)
+            batch_loss = criterion(logps, labels)
+
+            test_loss += batch_loss.item()
+
+            # Calculate accuracy
+            ps = torch.exp(logps)
+            top_p, top_class = ps.topk(1, dim=1)
+            equals = top_class == labels.view(*top_class.shape)
+            accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+
+    model.train()
+    avg_loss = test_loss/len(dataloader)
+    avg_accuracy = accuracy/len(dataloader)
+
+    return avg_loss, avg_accuracy
+
 def main():
     args = parse_arguments()
     print_argument_info(args)
+    model_parameters, model = get_model(args.arch)
+    my_dataloader = load_data(args.data_dir)
+    start_time = time.time()
+    train(model, model_parameters, my_dataloader)
+    end_time = time.time()
+    print("Training time: {}".format(end_time - start_time))
+    criterion = nn.NLLLoss()
+    avg_log, avg_accuracy = validation(model, my_dataloader["test"], criterion)
+    print("Accuracy of the network on the test images: {:.2f}%".format(100*avg_accuracy))
+
+    checkpoint = {'pretrain_model': model_parameters['pretrain_model'],
+                  'dropout': model_parameters['dropout'],
+                  'input_size': model_parameters['input_size'],
+                  'hidden_layer1': model_parameters['hidden_layer1'],
+                  'output_size': model_parameters['output_size'],
+                  'class_to_idx': model.class_to_idx,
+                  'classifier': model.classifier,
+                  'state_dict': model.state_dict(),
+                  }
+
+    checkpoint_name = model_parameters['pretrain_model'] + "_checkpoint.pth"
+
+    torch.save(checkpoint,
+               checkpoint_name
+               )
 
 if __name__ == "__main__":
     main()
