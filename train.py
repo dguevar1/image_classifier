@@ -1,5 +1,5 @@
-
 # Import packages
+import argparse
 from collections import OrderedDict
 import datetime
 import json
@@ -11,8 +11,6 @@ import torch
 from torch import nn
 from torch import optim
 from torchvision import datasets, transforms, models
-
-import argparse
 
 def get_classifier(model_parameters):
     classifier = nn.Sequential(OrderedDict([
