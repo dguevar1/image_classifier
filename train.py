@@ -1,6 +1,7 @@
 
 # Import packages
 from collections import OrderedDict
+import datetime
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,32 +17,34 @@ import argparse
 def get_classifier(model_parameters):
     classifier = nn.Sequential(OrderedDict([
         ('dropout', nn.Dropout(model_parameters['dropout'])),
-        ('fc1', nn.Linear(model_parameters['input_size'], model_parameters['hidden_layer1'])),
+        ('fc1', nn.Linear(model_parameters['input_size'], model_parameters['hidden_units'])),
         ('relu', nn.ReLU()),
-        ('fc2', nn.Linear(model_parameters['hidden_layer1'], model_parameters['output_size'])),
+        ('fc2', nn.Linear(model_parameters['hidden_units'], model_parameters['output_size'])),
         ('output', nn.LogSoftmax(dim=1))
         ]))
 
     return classifier
 
-def get_model(pretrain_model):
-    model_parameters = {"pretrain_model": pretrain_model,
+def get_model(arch, epochs, learning_rate):
+    model_parameters = {"arch": arch,
+                        "epochs": epochs,
+                        "learning_rate": learning_rate,
                         "dropout": -1,
                         "input_size": -1,
-                        "hidden_layer1": -1,
+                        "hidden_units": -1,
                         "output_size": -1
                         }
 
-    if pretrain_model == 'densenet121':
+    if arch == 'densenet121':
         model_parameters["dropout"] = 0.2
         model_parameters["input_size"] = 1024
-        model_parameters["hidden_layer1"] = 256
+        model_parameters["hidden_units"] = 256
         model_parameters["output_size"] = 102
         model = models.densenet121(pretrained=True)
-    elif pretrain_model == 'vgg16':
+    elif arch == 'vgg16':
         model_parameters["dropout"] = 0.5
         model_parameters["input_size"] = 25088
-        model_parameters["hidden_layer1"] = 512
+        model_parameters["hidden_units"] = 512
         model_parameters["output_size"] = 102
         model = models.vgg16(pretrained=True)
 
@@ -102,12 +105,12 @@ def load_data(data_dir):
     my_dataloader["valid"] = torch.utils.data.DataLoader(my_datasets["valid"], batch_size=64)
     my_dataloader["test"] = torch.utils.data.DataLoader(my_datasets["test"], batch_size=64)
 
-    return my_dataloader
+    return my_datasets, my_dataloader
 
 def parse_arguments():
     # Command line test cases:
     # 1.) python train.py flowers
-    # 2.) python train.py flowers --save_dir checkpoints --gpu
+    # 2.) python train.py flowers --save_dir checkpoints --epochs 5 --learning_rate 0.001 --gpu
     # 3.) python train.py flowers --arch "vgg16"
     # 4.) python train.py flowers --learning_rate 0.01 --hidden_units 512 --epochs 20
     # 5.) python train.py flowers --gpu
@@ -143,13 +146,15 @@ def print_argument_info(args):
         print("CPU will be used to train.")
 
 def print_model_parameters(model_parameters):
-    print("model_parameters['pretrain_model']: {}".format(model_parameters['pretrain_model']))
+    print("model_parameters['arch']: {}".format(model_parameters['arch']))
+    print("model_parameters['epochs']: {}".format(model_parameters['epochs']))
+    print("model_parameters['learning_rate']: {}".format(model_parameters['learning_rate']))
     print("model_parameters['dropout']: {}".format(model_parameters['dropout']))
     print("model_parameters['input_size']: {}".format(model_parameters['input_size']))
-    print("model_parameters['hidden_layer1']: {}".format(model_parameters['hidden_layer1']))
+    print("model_parameters['hidden_units']: {}".format(model_parameters['hidden_units']))
     print("model_parameters['output_size']: {}".format(model_parameters['output_size']))
 
-def train(model, model_parameters, my_dataloader):
+def train(model_parameters, model, my_dataloader):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training with device: {device}")
 
@@ -164,7 +169,7 @@ def train(model, model_parameters, my_dataloader):
     criterion = nn.NLLLoss()
 
     # Only train the classifier parameters, feature parameters are frozen
-    optimizer = optim.Adam(model.classifier.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.classifier.parameters(), lr=model_parameters['learning_rate'])
 
     # Moving model to device for training.
     model.to(device);
@@ -172,12 +177,11 @@ def train(model, model_parameters, my_dataloader):
     # Set the model mode to training.
     model.train()
 
-    epochs = 10
     steps = 0
     running_loss = 0
     print_every = 10
 
-    for epoch in range(epochs):
+    for epoch in range(model_parameters['epochs']):
         for inputs, labels in my_dataloader["train"]:
             steps += 1
 
@@ -211,7 +215,7 @@ def train(model, model_parameters, my_dataloader):
                         equals = top_class == labels.view(*top_class.shape)
                         accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
-                print(f"Epoch {epoch+1}/{epochs}.. "
+                print(f"Epoch {epoch+1}/{model_parameters['epochs']}.. "
                       f"Train loss: {running_loss/print_every:.3f}.. "
                       f"Test loss: {test_loss/len(my_dataloader['valid']):.3f}.. "
                       f"Test accuracy: {accuracy/len(my_dataloader['valid']):.3f}")
@@ -243,34 +247,46 @@ def validation(model, dataloader, criterion):
 
     return avg_loss, avg_accuracy
 
-def main():
-    args = parse_arguments()
-    print_argument_info(args)
-    model_parameters, model = get_model(args.arch)
-    my_dataloader = load_data(args.data_dir)
-    start_time = time.time()
-    train(model, model_parameters, my_dataloader)
-    end_time = time.time()
-    print("Training time: {}".format(end_time - start_time))
-    criterion = nn.NLLLoss()
-    avg_log, avg_accuracy = validation(model, my_dataloader["test"], criterion)
-    print("Accuracy of the network on the test images: {:.2f}%".format(100*avg_accuracy))
-
-    checkpoint = {'pretrain_model': model_parameters['pretrain_model'],
+def save_model(model_parameters, model, save_dir):
+    checkpoint = {'arch': model_parameters['arch'],
+                  'epochs': model_parameters['epochs'],
+                  'learning_rate': model_parameters['learning_rate'],
                   'dropout': model_parameters['dropout'],
                   'input_size': model_parameters['input_size'],
-                  'hidden_layer1': model_parameters['hidden_layer1'],
+                  'hidden_units': model_parameters['hidden_units'],
                   'output_size': model_parameters['output_size'],
                   'class_to_idx': model.class_to_idx,
                   'classifier': model.classifier,
                   'state_dict': model.state_dict(),
                   }
 
-    checkpoint_name = model_parameters['pretrain_model'] + "_checkpoint.pth"
+    checkpoint_name = save_dir + "/" + \
+                      model_parameters['arch'] + "_" + \
+                      str(model_parameters['epochs']) + "_" + \
+                      str(model_parameters['learning_rate']) + "_" + \
+                      str(model_parameters['hidden_units']) + "_" + \
+                      "checkpoint.pth"
 
     torch.save(checkpoint,
                checkpoint_name
                )
+
+def main():
+    args = parse_arguments()
+    print_argument_info(args)
+    model_parameters, model = get_model(args.arch, args.epochs, args.learning_rate)
+    my_datasets, my_dataloader = load_data(args.data_dir)
+    start_time = time.time()
+    train(model_parameters, model, my_dataloader)
+    end_time = time.time()
+    my_seconds = end_time - start_time
+    my_time_delta = str(datetime.timedelta(seconds=my_seconds))
+    print("Training time: {}".format(my_time_delta))
+    criterion = nn.NLLLoss()
+    avg_log, avg_accuracy = validation(model, my_dataloader["test"], criterion)
+    print("Accuracy of the network on the test images: {:.2f}%".format(100*avg_accuracy))
+    model.class_to_idx = my_datasets["train"].class_to_idx
+    save_model(model_parameters, model, args.save_dir)
 
 if __name__ == "__main__":
     main()
