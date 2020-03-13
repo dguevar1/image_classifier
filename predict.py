@@ -14,7 +14,9 @@ from torchvision import datasets, transforms, models
 def load_model(path):
     checkpoint = torch.load(path)
 
-    reconstructed_model_parameters = {"pretrain_model" : "",
+    reconstructed_model_parameters = {"arch" : "",
+                                      "epochs": -1,
+                                      "learning_rate": -1.0,
                                       "dropout": -1,
                                       "input_size": -1,
                                       "hidden_layer1": -1,
@@ -23,19 +25,21 @@ def load_model(path):
 
     reconstructed_model = None
 
-    reconstructed_model_parameters['pretrain_model'] = checkpoint['pretrain_model']
+    reconstructed_model_parameters['arch'] = checkpoint['arch']
+    reconstructed_model_parameters['epochs'] = checkpoint['epochs']
+    reconstructed_model_parameters['learning_rate'] = checkpoint['learning_rate']
     reconstructed_model_parameters['dropout'] = checkpoint['dropout']
     reconstructed_model_parameters['input_size'] = checkpoint['input_size']
-    reconstructed_model_parameters['hidden_layer1'] = checkpoint['hidden_layer1']
+    reconstructed_model_parameters['hidden_units'] = checkpoint['hidden_units']
     reconstructed_model_parameters['output_size'] = checkpoint['output_size']
 
 
-    if reconstructed_model_parameters['pretrain_model'] == 'densenet121':
+    if reconstructed_model_parameters['arch'] == 'densenet121':
         reconstruced_model = models.densenet121(pretrained=True)
-    elif reconstructed_model_parameters['pretrain_model'] == 'vgg16':
+    elif reconstructed_model_parameters['arch'] == 'vgg16':
         reconstructed_model = models.vgg16(pretrained=True)
     else :
-        raise Exception("Invalid pretrain_model name: {}".format(reconstructed_model_parameters['pretrain_model']))
+        raise Exception("Invalid arch name: {}".format(reconstructed_model_parameters['arch']))
 
     reconstructed_model.classifier = checkpoint['classifier']
     reconstructed_model.class_to_idx = checkpoint['class_to_idx']
@@ -124,10 +128,12 @@ def print_argument_info(args):
         print("CPU will be used to train.")
 
 def print_model_parameters(model_parameters):
-    print("model_parameters['pretrain_model']: {}".format(model_parameters['pretrain_model']))
+    print("model_parameters['arch']: {}".format(model_parameters['arch']))
+    print("model_parameters['epochs']: {}".format(model_parameters['epochs']))
+    print("model_parameters['learning_rate']: {}".format(model_parameters['learning_rate']))
     print("model_parameters['dropout']: {}".format(model_parameters['dropout']))
     print("model_parameters['input_size']: {}".format(model_parameters['input_size']))
-    print("model_parameters['hidden_layer1']: {}".format(model_parameters['hidden_layer1']))
+    print("model_parameters['hidden_units']: {}".format(model_parameters['hidden_units']))
     print("model_parameters['output_size']: {}".format(model_parameters['output_size']))
 
 def process_image(image_path):
@@ -196,7 +202,7 @@ def main():
     names = [cat_to_name[i] for i in classes]
 
     for name, prob in zip(names, probs):
-        print("{} has probability {}".format(name, prob))
+        print("{} has probability {:.4f}".format(name, prob))
 
 if __name__ == "__main__":
     main()
