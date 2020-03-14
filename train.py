@@ -110,7 +110,7 @@ def parse_arguments():
     # 5.) python train.py flowers --gpu
     parser = argparse.ArgumentParser(description="Prints out training loss, validation loss, and validation accuracy as the network trains.")
     parser.add_argument("data_dir")
-    parser.add_argument("--save_dir", default="./", help="The directory where the model checkpoint should be saved.")
+    parser.add_argument("--save_dir", default=".", help="The directory where the model checkpoint should be saved.")
     parser.add_argument("--arch", default="vgg16", choices=["vgg16","densenet121"], help="Specify the architecure, or pretrain model, to use.")
     parser.add_argument("--epochs", type=int, default=10, help="The number of epochs to train the model.")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="The learning rate to use during training.")
