@@ -112,10 +112,10 @@ def parse_arguments():
     parser.add_argument("data_dir")
     parser.add_argument("--save_dir", default="./", help="The directory where the model checkpoint should be saved.")
     parser.add_argument("--arch", default="vgg16", choices=["vgg16","densenet121"], help="Specify the architecure, or pretrain model, to use.")
+    parser.add_argument("--epochs", type=int, default=10, help="The number of epochs to train the model.")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="The learning rate to use during training.")
     parser.add_argument("--dropout", type=float, default=0.2, help="The dropout is used to reduce overfitting and improve generalization error. ")
     parser.add_argument("--hidden_units", type=int, default=512, help="The number of units in the hidden layer.")
-    parser.add_argument("--epochs", type=int, default=10, help="The number of epochs to train the model.")
     parser.add_argument("--gpu", action="store_true", help="Use the GPU for training.")
 
     return parser.parse_args()
@@ -129,13 +129,13 @@ def print_argument_info(args):
 
     print("The hyperparameters are the following:")
 
+    print("epochs: {}".format(args.epochs))
+
     print("learning_rate: {}".format(args.learning_rate))
 
     print("dropout: {}".format(args.dropout))
 
     print("hidden_units: {}".format(args.hidden_units))
-
-    print("epochs: {}".format(args.epochs))
 
     if args.gpu:
         print("GPU will be used to train.")
@@ -195,7 +195,7 @@ def train(model_parameters, model, my_dataloaders):
             running_loss += loss.item()
 
             if steps % print_every == 0:
-                test_loss = 0
+                validation_loss = 0
                 accuracy = 0
                 model.eval()
                 with torch.no_grad():
@@ -204,7 +204,7 @@ def train(model_parameters, model, my_dataloaders):
                         logps = model.forward(inputs)
                         batch_loss = criterion(logps, labels)
 
-                        test_loss += batch_loss.item()
+                        validation_loss += batch_loss.item()
 
                         # Calculate accuracy
                         ps = torch.exp(logps)
@@ -214,8 +214,8 @@ def train(model_parameters, model, my_dataloaders):
 
                 print(f"Epoch {epoch+1}/{model_parameters['epochs']}.. "
                       f"Train loss: {running_loss/print_every:.3f}.. "
-                      f"Test loss: {test_loss/len(my_dataloaders['valid']):.3f}.. "
-                      f"Test accuracy: {accuracy/len(my_dataloaders['valid']):.3f}")
+                      f"Validation loss: {validation_loss/len(my_dataloaders['valid']):.3f}.. "
+                      f"Validation accuracy: {accuracy/len(my_dataloaders['valid']):.3f}")
                 running_loss = 0
                 model.train()
 
