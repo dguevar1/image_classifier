@@ -23,26 +23,22 @@ def get_classifier(model_parameters):
 
     return classifier
 
-def get_model(arch, epochs, learning_rate):
+def get_model(arch, epochs, learning_rate, dropout, hidden_units):
     model_parameters = {"arch": arch,
                         "epochs": epochs,
                         "learning_rate": learning_rate,
-                        "dropout": -1,
+                        "dropout": dropout,
                         "input_size": -1,
-                        "hidden_units": -1,
+                        "hidden_units": hidden_units,
                         "output_size": -1
                         }
 
     if arch == 'densenet121':
-        model_parameters["dropout"] = 0.2
         model_parameters["input_size"] = 1024
-        model_parameters["hidden_units"] = 256
         model_parameters["output_size"] = 102
         model = models.densenet121(pretrained=True)
     elif arch == 'vgg16':
-        model_parameters["dropout"] = 0.5
         model_parameters["input_size"] = 25088
-        model_parameters["hidden_units"] = 512
         model_parameters["output_size"] = 102
         model = models.vgg16(pretrained=True)
 
@@ -94,16 +90,16 @@ def load_data(data_dir):
     my_datasets["test"]= datasets.ImageFolder(my_data_dir["test"], transform=my_transforms["test"])
 
     # TODO: Using the image datasets and the trainforms, define the dataloaders
-    my_dataloader = {"train" : None,
+    my_dataloaders = {"train" : None,
                      "valid" : None,
                      "test" : None
                      }
 
-    my_dataloader["train"] = torch.utils.data.DataLoader(my_datasets["train"], batch_size=64, shuffle=True)
-    my_dataloader["valid"] = torch.utils.data.DataLoader(my_datasets["valid"], batch_size=64)
-    my_dataloader["test"] = torch.utils.data.DataLoader(my_datasets["test"], batch_size=64)
+    my_dataloaders["train"] = torch.utils.data.DataLoader(my_datasets["train"], batch_size=64, shuffle=True)
+    my_dataloaders["valid"] = torch.utils.data.DataLoader(my_datasets["valid"], batch_size=64)
+    my_dataloaders["test"] = torch.utils.data.DataLoader(my_datasets["test"], batch_size=64)
 
-    return my_datasets, my_dataloader
+    return my_datasets, my_dataloaders
 
 def parse_arguments():
     # Command line test cases:
@@ -117,6 +113,7 @@ def parse_arguments():
     parser.add_argument("--save_dir", default="./", help="The directory where the model checkpoint should be saved.")
     parser.add_argument("--arch", default="vgg16", choices=["vgg16","densenet121"], help="Specify the architecure, or pretrain model, to use.")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="The learning rate to use during training.")
+    parser.add_argument("--dropout", type=float, default=0.2, help="The dropout is used to reduce overfitting and improve generalization error. ")
     parser.add_argument("--hidden_units", type=int, default=512, help="The number of units in the hidden layer.")
     parser.add_argument("--epochs", type=int, default=10, help="The number of epochs to train the model.")
     parser.add_argument("--gpu", action="store_true", help="Use the GPU for training.")
@@ -133,6 +130,8 @@ def print_argument_info(args):
     print("The hyperparameters are the following:")
 
     print("learning_rate: {}".format(args.learning_rate))
+
+    print("dropout: {}".format(args.dropout))
 
     print("hidden_units: {}".format(args.hidden_units))
 
@@ -152,7 +151,7 @@ def print_model_parameters(model_parameters):
     print("model_parameters['hidden_units']: {}".format(model_parameters['hidden_units']))
     print("model_parameters['output_size']: {}".format(model_parameters['output_size']))
 
-def train(model_parameters, model, my_dataloader):
+def train(model_parameters, model, my_dataloaders):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training with device: {device}")
 
@@ -180,7 +179,7 @@ def train(model_parameters, model, my_dataloader):
     print_every = 10
 
     for epoch in range(model_parameters['epochs']):
-        for inputs, labels in my_dataloader["train"]:
+        for inputs, labels in my_dataloaders["train"]:
             steps += 1
 
             # Move input and label tensors to the default device
@@ -200,7 +199,7 @@ def train(model_parameters, model, my_dataloader):
                 accuracy = 0
                 model.eval()
                 with torch.no_grad():
-                    for inputs, labels in my_dataloader["valid"]:
+                    for inputs, labels in my_dataloaders["valid"]:
                         inputs, labels = inputs.to(device), labels.to(device)
                         logps = model.forward(inputs)
                         batch_loss = criterion(logps, labels)
@@ -215,8 +214,8 @@ def train(model_parameters, model, my_dataloader):
 
                 print(f"Epoch {epoch+1}/{model_parameters['epochs']}.. "
                       f"Train loss: {running_loss/print_every:.3f}.. "
-                      f"Test loss: {test_loss/len(my_dataloader['valid']):.3f}.. "
-                      f"Test accuracy: {accuracy/len(my_dataloader['valid']):.3f}")
+                      f"Test loss: {test_loss/len(my_dataloaders['valid']):.3f}.. "
+                      f"Test accuracy: {accuracy/len(my_dataloaders['valid']):.3f}")
                 running_loss = 0
                 model.train()
 
@@ -262,6 +261,7 @@ def save_model(model_parameters, model, save_dir):
                       model_parameters['arch'] + "_" + \
                       str(model_parameters['epochs']) + "_" + \
                       str(model_parameters['learning_rate']) + "_" + \
+                      str(model_parameters['dropout']) + "_" + \
                       str(model_parameters['hidden_units']) + "_" + \
                       "checkpoint.pth"
 
@@ -272,17 +272,17 @@ def save_model(model_parameters, model, save_dir):
 def main():
     args = parse_arguments()
     print_argument_info(args)
-    model_parameters, model = get_model(args.arch, args.epochs, args.learning_rate)
-    my_datasets, my_dataloader = load_data(args.data_dir)
+    model_parameters, model = get_model(args.arch, args.epochs, args.learning_rate, args.dropout, args.hidden_units)
+    my_datasets, my_dataloaders = load_data(args.data_dir)
     start_time = time.time()
-    train(model_parameters, model, my_dataloader)
+    train(model_parameters, model, my_dataloaders)
     end_time = time.time()
     my_seconds = end_time - start_time
     my_time_delta = str(datetime.timedelta(seconds=my_seconds))
     print("Training time: {}".format(my_time_delta))
     criterion = nn.NLLLoss()
-    avg_log, avg_accuracy = validation(model, my_dataloader["test"], criterion)
-    print("Accuracy of the network on the test images: {:.2f}%".format(100*avg_accuracy))
+    avg_log, avg_accuracy = validation(model, my_dataloaders["test"], criterion)
+    print("Accuracy of the network on the test images: {:.3f}%".format(100*avg_accuracy))
     model.class_to_idx = my_datasets["train"].class_to_idx
     save_model(model_parameters, model, args.save_dir)
 

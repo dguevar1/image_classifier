@@ -202,7 +202,7 @@ def main():
     names = [cat_to_name[i] for i in classes]
 
     for name, prob in zip(names, probs):
-        print("{} has probability {:.4f}".format(name, prob))
+        print("{} has probability {:.3f}".format(name, prob))
 
 if __name__ == "__main__":
     main()
