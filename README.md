@@ -35,3 +35,15 @@ jupyter notebook Image Classifier Project.ipynb
 ```
 
 This will open the iPython Notebook software and project file in your browser.
+
+### Data
+
+This project uses a dataset consisting of 102 flower categories. Each class
+consists of between 40 and 258 images. More information about the dataset
+can be obtain from the following URL:
+
+[http://www.robots.ox.ac.uk/~vgg/data/flowers/102/index.html](http://www.robots.ox.ac.uk/~vgg/data/flowers/102/index.html)
+
+The data should be included alongside this notebook. If it is not, the exact dataset used by this project was taken from Udacity at the following URL:
+
+[https://s3.amazonaws.com/content.udacity-data.com/nd089/flower_data.tar.gz](https://s3.amazonaws.com/content.udacity-data.com/nd089/flower_data.tar.gz)
